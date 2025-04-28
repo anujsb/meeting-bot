@@ -53,7 +53,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../../auth/[...nextauth]/route";
+import { authOptions } from "../../auth/[...nextauth]/auth";
 import { google } from "googleapis";
 // import NextAuth from "next-auth";
 declare module "next-auth" {
