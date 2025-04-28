@@ -64,6 +64,7 @@ declare module "next-auth" {
 }
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
+
   if (!session || !session.accessToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -77,54 +78,20 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Initialize the Google Calendar API client
-    const auth = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET
-    );
-    auth.setCredentials({ 
-      access_token: session.accessToken,
-      token_type: 'Bearer'
-    });
-    
-    const calendar = google.calendar({ version: "v3", auth });
-    
-    // Create a calendar event with a Google Meet link
-    const now = new Date();
-    const endTime = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour later
-    
-    const event = {
-      summary: "Google Meet with tl;dv",
-      start: { dateTime: now.toISOString(), timeZone: "UTC" },
-      end: { dateTime: endTime.toISOString(), timeZone: "UTC" },
-      attendees: [{ email: "bot@tldv.io" }],
-      // This will automatically create a Google Meet link
-      conferenceData: {
-        createRequest: {
-          requestId: `meet-${Date.now()}`,
-          conferenceSolutionKey: { type: "hangoutsMeet" }
-        }
-      }
-    };
-    
-    const calendarResponse = await calendar.events.insert({
-      calendarId: "primary",
-      requestBody: event,
-      conferenceDataVersion: 1 // Required for creating Meet links
-    });
+    // Initialize the Google Meet API client
+    const auth = new google.auth.OAuth2();
+    auth.setCredentials({ access_token: session.accessToken });
+    const meet = google.meet({ version: "v2", auth });
 
-    // Extract the Meet link from the response
-    const meetingUri = calendarResponse.data.hangoutLink || 
-                      calendarResponse.data.conferenceData?.entryPoints?.[0]?.uri;
+    // Create a new Meet space
+    const response = await meet.spaces.create({});
+    const meetingUri = response.data.meetingUri;
     
     if (!meetingUri) {
-      throw new Error("Failed to get meeting URI from calendar response");
+      throw new Error("Failed to get meeting URI from response");
     }
 
-    return NextResponse.json(
-      { meetingUri, eventId: calendarResponse.data.id },
-      { status: 201 }
-    );
+    return NextResponse.json({ meetingUri }, { status: 201 });
   } catch (error: any) {
     console.error("Error creating Google Meet meeting:", error);
     
