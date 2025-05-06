@@ -1,13 +1,11 @@
 // src/lib/meetingBot.ts
 import puppeteer, { Browser, Page } from 'puppeteer';
-import { startTranscription, stopTranscription, sendAudioChunk } from './assemblyAI';
 
 interface MeetingBot {
   meetingId: string;
   meetingUrl: string;
   browser?: Browser;
   page?: Page;
-  transcriptionId?: string;
   startTime: Date;
   isActive: boolean;
   userId: string;
@@ -102,7 +100,7 @@ export async function joinMeeting(meetingUrl: string, userId: string): Promise<s
       }
     });
     
-    // Wait for meeting to load completely - try multiple selectors
+    // Wait for meeting to load completely
     try {
       await Promise.race([
         page.waitForSelector('[data-self-name]', { timeout: 60000 }),
@@ -131,28 +129,6 @@ export async function joinMeeting(meetingUrl: string, userId: string): Promise<s
       console.log('[MeetingBot] Meeting appears to be loaded despite selector timeout');
     }
     
-    // Start AssemblyAI transcription
-    const transcriptionId = await startTranscription(meetingId);
-    bot.transcriptionId = transcriptionId;
-    
-    // Set up audio capture
-    await page.evaluate(() => {
-      // In a real implementation, we would capture audio from the meeting
-      // This is a simplified implementation
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const destination = audioContext.createMediaStreamDestination();
-      
-      // Capture audio from the meeting (this is simplified)
-      // In a real implementation, you'd need to access the audio elements in the page
-      
-      // Process and send audio to server
-      const processor = audioContext.createScriptProcessor(4096, 1, 1);
-      processor.onaudioprocess = (e) => {
-        const audioData = e.inputBuffer.getChannelData(0);
-        // Send audio data to server (would need WebSocket or other mechanism)
-      };
-    });
-    
     // Store bot instance
     activeBots.set(meetingId, bot);
     
@@ -163,75 +139,12 @@ export async function joinMeeting(meetingUrl: string, userId: string): Promise<s
   }
 }
 
-export async function leaveMeeting(meetingId: string): Promise<any> {
-  const bot = activeBots.get(meetingId);
-  
-  if (!bot) {
-    throw new Error(`No meeting bot found with ID: ${meetingId}`);
-  }
-  
-  try {
-    console.log(`[MeetingBot] Leaving meeting: ${bot.meetingUrl}`);
-    
-    // Click on leave meeting button if page is still open
-    if (bot.page) {
-      await bot.page.evaluate(() => {
-        const leaveButton = Array.from(document.querySelectorAll('button')).find(button => {
-          const text = button.textContent?.toLowerCase() || '';
-          return text.includes('leave') || text.includes('hangup') || text.includes('end');
-        });
-        
-        if (leaveButton) {
-          (leaveButton as HTMLElement).click();
-        }
-      });
-    }
-    
-    // Close the browser
-    if (bot.browser) {
-      await bot.browser.close();
-    }
-    
-    // Stop transcription and get results
-    let transcriptionResult;
-    if (bot.transcriptionId) {
-      transcriptionResult = await stopTranscription(bot.transcriptionId);
-    }
-    
-    // Mark bot as inactive
-    bot.isActive = false;
-    
-    // Remove from active bots after a delay (to allow for any pending operations)
-    setTimeout(() => {
-      activeBots.delete(meetingId);
-    }, 5000);
-    
-    // Calculate meeting duration
-    const endTime = new Date();
-    const durationMs = endTime.getTime() - bot.startTime.getTime();
-    const duration = {
-      hours: Math.floor(durationMs / (1000 * 60 * 60)),
-      minutes: Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60)),
-      seconds: Math.floor((durationMs % (1000 * 60)) / 1000)
-    };
-    
-    return {
-      transcription: transcriptionResult,
-      meetingDuration: duration,
-      meetingUrl: bot.meetingUrl
-    };
-  } catch (error) {
-    console.error('[MeetingBot] Failed to leave meeting:', error);
-    throw error;
-  }
-}
-
 export function getActiveMeetingBot(meetingId: string): MeetingBot | undefined {
   return activeBots.get(meetingId);
 }
 
 export function getActiveMeetingBotByUserId(userId: string): MeetingBot | undefined {
-  return Array.from(activeBots.values()).find(bot => bot.userId === userId && bot.isActive);
+  return Array.from(activeBots.values()).find(bot => bot.userId === userId);
 }
 
 export function getAllActiveMeetingBots(): MeetingBot[] {
